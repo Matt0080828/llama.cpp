@@ -67,6 +67,18 @@
     { "name": "x64-linux-gcc-reldbg", "inherits": [ "base", "x64-linux-gcc", "reldbg" ] },
     { "name": "x64-linux-gcc+static-release", "inherits": [ "base", "x64-linux-gcc", "release", "static" ] },
 
+    {
+        "name": "openwrt-t830",
+        "displayName": "OpenWrt T830 (aarch64 musl, CPU+NEON, cross)",
+        "description": "Cross-build for the Askey T830 CPE. Pass CC/CXX as -DCMAKE_C(XX)_COMPILER pointing at the OpenWrt target toolchain. See docs/openwrt.md.",
+        "generator": "Unix Makefiles",
+        "binaryDir": "${sourceDir}/build-openwrt-t830",
+        "cacheVariables": {
+            "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/openwrt-t830.cmake",
+            "CMAKE_BUILD_TYPE": "Release"
+        }
+    },
+
     { "name": "arm64-windows-llvm-debug", "inherits": [ "base", "arm64-windows-llvm", "debug" ] },
     { "name": "arm64-windows-llvm-release", "inherits": [ "base", "arm64-windows-llvm", "reldbg" ] },
     { "name": "arm64-windows-llvm+static-release", "inherits": [ "base", "arm64-windows-llvm", "reldbg", "static" ] },
