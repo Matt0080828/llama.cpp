@@ -11,9 +11,11 @@ for the Askey T830 CPE (NCM1000C3 / HH20C, FG370 SDK).
 - `CMakePresets.json` — preset `openwrt-t830` for one-command local configure.
 - `docs/openwrt.md` (this file).
 
-The code itself is unchanged — master's CMake already handles
-`CMAKE_CROSSCOMPILING` (auto-disables `GGML_NATIVE`), so no source patch is
-required.
+Master's CMake already handles `CMAKE_CROSSCOMPILING` (auto-disables
+`GGML_NATIVE`). The FG370/T830 prebuilt toolchain is **GCC 9.3.0**, which
+lacks `vld1q_s8_x4` / `vld1q_u8_x4`; `ggml/src/ggml-cpu/ggml-cpu-impl.h`
+composes those loads for GCC < 10. CMake 3.22 cannot read `CMakePresets.json`
+version 4 — pass `-DCMAKE_TOOLCHAIN_FILE=cmake/openwrt-t830.cmake` instead.
 
 ## OpenWrt package integration
 
@@ -43,12 +45,52 @@ CMAKE_OPTIONS += \
 OpenWrt's `include/cmake.mk` auto-generates the cross toolchain file and
 installs a host cmake if the tree has none.
 
+## Host cross-build (FG370 SDK, GCC 9.3)
+
+Verified on Ubuntu 22.04 host cmake 3.22.1 against the Fibocom FG370 /
+Askey T830 SDK prebuilt toolchain:
+
+`mtk/prebuilt/openwrt-toolchain/arm64-a55_neon-gcc-9.3.0_musl`
+
+(extracted from `mtk_src/mtk-ea23b8b.tar.gz`). CMake 3.22 cannot read
+`CMakePresets.json` version 4, so pass the toolchain file by hand.
+
+```bash
+# point TC at the unpacked toolchain root (contains bin/ and lib/)
+TC=/path/to/arm64-a55_neon-gcc-9.3.0_musl
+export STAGING_DIR="$TC"
+export PATH="$TC/bin:$PATH"
+
+cmake -S . -B build-openwrt-t830 \
+  -G "Unix Makefiles" \
+  -DCMAKE_TOOLCHAIN_FILE=cmake/openwrt-t830.cmake \
+  -DCMAKE_C_COMPILER="$TC/bin/aarch64-openwrt-linux-musl-gcc" \
+  -DCMAKE_CXX_COMPILER="$TC/bin/aarch64-openwrt-linux-musl-g++" \
+  -DCMAKE_FIND_ROOT_PATH="$TC"
+
+cmake --build build-openwrt-t830 -j"$(nproc)" --target llama-cli llama-server
+file build-openwrt-t830/bin/llama-cli build-openwrt-t830/bin/llama-server
+```
+
+Expected:
+
+```text
+ELF 64-bit LSB executable, ARM aarch64
+interpreter: /lib/ld-musl-aarch64.so.1
+NEEDED: libstdc++.so.6, libgcc_s.so.1, libc.so
+```
+
+These are **not** fully static. On the T830 rootfs the loader is
+`/lib/ld-musl-aarch64.so.1`. The matching host copy lives at
+`$TC/lib/ld-musl-aarch64.so.1`. The device also needs `libstdc++.so.6`,
+`libgcc_s.so.1`, and musl `libc.so` (OpenWrt already ships musl).
+
+Host RPATH baked into the ELF points at `$TC/lib` and is unused on device.
+
 ## Prerequisites on the SDK
 
-- target C++17-capable cross g++ (T830 toolchain is gcc 12 class — OK)
-- C++ runtime for musl (uclibc++/libstdc++ in the SDK — the tree ships
-  `package/libs/uclibc++`; set `DEPENDS:=+uclibc++` in the package if the
-  binaries dynamically link it)
+- GCC 9.3.0 aarch64 musl (`aarch64-openwrt-linux-musl-g++`); C++17 is OK
+- musl C++ runtime on the target (`libstdc++.so.6` / `libgcc_s.so.1`)
 
 ## Model
 
