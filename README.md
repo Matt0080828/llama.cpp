@@ -99,6 +99,7 @@ The `llama.cpp` project is build on top of the [ggml](https://github.com/ggml-or
 #### Development
 
 - [How to build](docs/build.md)
+- [OpenWrt T830 / FG370 (aarch64 musl)](docs/openwrt.md)
 - [Running on Docker](docs/docker.md)
 - [Build on Android](docs/android.md)
 - [Multi-GPU usage](docs/multi-gpu.md)
@@ -108,6 +109,54 @@ The `llama.cpp` project is build on top of the [ggml](https://github.com/ggml-or
 - [Completions](docs/completions.md)
 - [Models](docs/models.md)
 - [Release process](docs/release.md)
+
+## Build T830 binaries (this fork)
+
+Branch `openwrt-t830`. Cross-compile `llama-cli` / `llama-server` on an x86_64
+host with the Fibocom FG370 / Askey T830 SDK toolchain
+(`arm64-a55_neon-gcc-9.3.0_musl`, GCC 9.3). CPU+NEON only. More notes:
+[docs/openwrt.md](docs/openwrt.md).
+
+Host needs cmake ≥ 3.16 (3.22 cannot read this repo's CMakePresets v4, so
+pass the toolchain file explicitly).
+
+```bash
+git clone -b openwrt-t830 https://github.com/Matt0080828/llama.cpp.git
+cd llama.cpp
+
+# unpacked SDK toolchain root (contains bin/ and lib/)
+TC=/path/to/arm64-a55_neon-gcc-9.3.0_musl
+export STAGING_DIR="$TC"
+export PATH="$TC/bin:$PATH"
+
+cmake -S . -B build-openwrt-t830 \
+  -G "Unix Makefiles" \
+  -DCMAKE_TOOLCHAIN_FILE=cmake/openwrt-t830.cmake \
+  -DCMAKE_C_COMPILER="$TC/bin/aarch64-openwrt-linux-musl-gcc" \
+  -DCMAKE_CXX_COMPILER="$TC/bin/aarch64-openwrt-linux-musl-g++" \
+  -DCMAKE_FIND_ROOT_PATH="$TC"
+
+cmake --build build-openwrt-t830 -j"$(nproc)" --target llama-cli llama-server
+file build-openwrt-t830/bin/llama-cli build-openwrt-t830/bin/llama-server
+```
+
+Outputs:
+
+```text
+build-openwrt-t830/bin/llama-cli
+build-openwrt-t830/bin/llama-server
+```
+
+Expect `ELF 64-bit LSB executable, ARM aarch64` with interpreter
+`/lib/ld-musl-aarch64.so.1` (device path; host copy is `$TC/lib/ld-musl-aarch64.so.1`).
+Not fully static: also needs `libstdc++.so.6`, `libgcc_s.so.1`, musl `libc.so`
+on the T830 rootfs.
+
+On device (CPU only, ~270M Q4 GGUF, ctx 2048):
+
+```sh
+./llama-server -ngl 0 -c 2048 --parallel 1 -m functiongemma-270m-it-q4_k_m.gguf
+```
 
 ## Contributing
 
